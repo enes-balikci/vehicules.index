@@ -1,4 +1,4 @@
-// Yüksek çözünürlüklü partikül animasyonu - Ferrari ve diğer rastgele şekiller
+// Yüksek çözünürlüklü 3D otomobil partikül animasyonu (Ferrari, Audi, Mercedes)
 
 const container = document.getElementById('bg-webgl');
 let scene, camera, renderer, particles, particlePositions, targetPositions, particleCount = 5000;
@@ -6,133 +6,155 @@ let state = "scatter";
 let scatterTimeout, gatherTimeout;
 let mouse = { x: 0, y: 0, z: 0 };
 
-const shapes = ["circle", "square", "triangle", "star", "ferrari"];
+const shapes = ["ferrari", "audi", "mercedes"];
 
-function randomScatterPositions() {
+// Ferrari: sportif coupe (gövde ve spoiler ile)
+function ferrariShapePositions() {
     const positions = new Float32Array(particleCount * 3);
-    for (let i = 0; i < particleCount; i++) {
-        positions[i * 3] = (Math.random() - 0.5) * 700;
-        positions[i * 3 + 1] = (Math.random() - 0.5) * 420;
-        positions[i * 3 + 2] = (Math.random() - 0.5) * 700;
+    // 3D coupe silueti (basit)
+    const base = [
+        // Alt gövde (x, y, z)
+        [-130, -30, -30], [-110, -33, -27], [-70, -35, -15], [-30, -36, 0], [0, -35, 5],
+        [30, -36, 0], [70, -35, -15], [110, -33, -27], [130, -30, -30],
+        // Arka (spoiler)
+        [140, -25, -15], [145, 0, 10], [140, 25, -15],
+        // Üst gövde ve tavan
+        [110, 35, 35], [70, 38, 45], [30, 40, 52], [0, 41, 55],
+        [-30, 40, 52], [-70, 38, 45], [-110, 35, 35],
+        // Ön cam ve kaput
+        [-140, 25, -15], [-145, 0, 10], [-140, -25, -15],
+    ];
+    // Tekerler ve gövde arasında partikülleri dağıt
+    const outlineCount = base.length;
+    let i = 0;
+    for (; i < Math.floor(particleCount * 0.75); i++) {
+        const t = (i / Math.floor(particleCount * 0.75)) * (outlineCount - 1);
+        const idx = Math.floor(t);
+        const frac = t - idx;
+        const x = base[idx][0] + frac * (base[(idx+1)%outlineCount][0] - base[idx][0]);
+        const y = base[idx][1] + frac * (base[(idx+1)%outlineCount][1] - base[idx][1]);
+        const z = base[idx][2] + frac * (base[(idx+1)%outlineCount][2] - base[idx][2]);
+        positions[i*3] = x;
+        positions[i*3+1] = y;
+        positions[i*3+2] = z;
+    }
+    // Ön ve arka tekerlek (küçük toruslar)
+    function wheel(cx, cy, cz, r, segCount, offset) {
+        for (let j = 0; j < segCount; j++) {
+            const theta = (j / segCount) * 2 * Math.PI;
+            positions[(offset + j) * 3] = cx + Math.cos(theta) * r;
+            positions[(offset + j) * 3 + 1] = cy + Math.sin(theta) * r;
+            positions[(offset + j) * 3 + 2] = cz - 15 + Math.sin(theta) * 7;
+        }
+    }
+    wheel(-80, -36, -30, 17, Math.floor(particleCount*0.07), i); i += Math.floor(particleCount*0.07);
+    wheel(80, -36, -30, 17, Math.floor(particleCount*0.07), i); i += Math.floor(particleCount*0.07);
+    // Artan partiküller tavan ve cam bölgesine random
+    for(let j = i; j < particleCount; j++) {
+        positions[j*3] = (Math.random()-0.5)*100;
+        positions[j*3+1] = 25 + Math.random()*18;
+        positions[j*3+2] = 32 + Math.random()*18;
     }
     return positions;
 }
 
-// Ferrari gövdesinin yaklaşık siluet koordinatları (2D olarak)
-const ferrariOutline = [
-    {x:-120, y:-30}, {x:-110, y:-38}, {x:-80, y:-42}, {x:-65, y:-40}, {x:-30, y:-35},
-    {x:0, y:-34}, {x:35, y:-38}, {x:65, y:-43}, {x:100, y:-36}, {x:120, y:-24},
-    {x:110, y:-10}, {x:100, y:0}, {x:80, y:18}, {x:60, y:25}, {x:25, y:30},
-    {x:0, y:32}, {x:-25, y:30}, {x:-60, y:25}, {x:-80, y:18}, {x:-100, y:0}, {x:-110, y:-10},
-    {x:-128, y:-8}, {x:-135, y:10}, {x:-133, y:35}, {x:-100, y:55}, {x:-50, y:60},
-    {x:0, y:60}, {x:50, y:60}, {x:100, y:55}, {x:133, y:35}, {x:135, y:10}, {x:128, y:-8},
-    {x:120, y:24}, {x:80, y:38}, {x:40, y:44}, {x:0, y:47}, {x:-40, y:44}, {x:-80, y:38}, {x:-120, y:24}
-];
-
-function ferrariShapePositions() {
+// Audi: sedan/coupe karışımı, belirgin tavan ve alçak gövde
+function audiShapePositions() {
     const positions = new Float32Array(particleCount * 3);
-    const outlineCount = ferrariOutline.length;
-    // Tekerlekler için ek daireler
-    function tire(cx, cy, r, segStart, segEnd, segCount, offset) {
-        for (let j = 0; j < segCount; j++) {
-            const t = segStart + (segEnd - segStart) * (j / segCount);
-            positions[(offset + j) * 3] = cx + Math.cos(t) * r;
-            positions[(offset + j) * 3 + 1] = cy + Math.sin(t) * r;
-            positions[(offset + j) * 3 + 2] = 0;
-        }
-    }
-    let i;
-    for (i = 0; i < Math.floor(particleCount * 0.7); i++) {
-        const t = (i / Math.floor(particleCount * 0.7)) * (outlineCount - 1);
+    const base = [
+        // Alt gövde
+        [-120, -35, -28], [-80, -38, -24], [-35, -39, -14], [0, -40, -8], [35, -39, -14], [80, -38, -24], [120, -35, -28],
+        // Arka tampon
+        [135, -28, -16], [140, 0, 5], [135, 28, -16],
+        // Tavan ve camlar
+        [110, 34, 25], [80, 38, 32], [35, 41, 38], [0, 42, 40], [-35, 41, 38], [-80, 38, 32], [-110, 34, 25],
+        // Ön tampon
+        [-135, 28, -16], [-140, 0, 5], [-135, -28, -16],
+    ];
+    const outlineCount = base.length;
+    let i = 0;
+    for (; i < Math.floor(particleCount * 0.75); i++) {
+        const t = (i / Math.floor(particleCount * 0.75)) * (outlineCount - 1);
         const idx = Math.floor(t);
         const frac = t - idx;
-        const x = ferrariOutline[idx].x + frac * (ferrariOutline[(idx+1)%outlineCount].x - ferrariOutline[idx].x);
-        const y = ferrariOutline[idx].y + frac * (ferrariOutline[(idx+1)%outlineCount].y - ferrariOutline[idx].y);
+        const x = base[idx][0] + frac * (base[(idx+1)%outlineCount][0] - base[idx][0]);
+        const y = base[idx][1] + frac * (base[(idx+1)%outlineCount][1] - base[idx][1]);
+        const z = base[idx][2] + frac * (base[(idx+1)%outlineCount][2] - base[idx][2]);
         positions[i*3] = x;
         positions[i*3+1] = y;
-        positions[i*3+2] = 0;
+        positions[i*3+2] = z;
     }
-    // Ön tekerlek (solda)
-    tire(-80, 48, 16, Math.PI, Math.PI*3, Math.floor(particleCount*0.15), i);
-    i += Math.floor(particleCount*0.15);
-    // Arka tekerlek (sağda)
-    tire(80, 48, 16, Math.PI, Math.PI*3, Math.floor(particleCount*0.15), i);
-    // Artan partiküller random gövdeye
-    for(let j = i + Math.floor(particleCount*0.15); j < particleCount; j++) {
-        positions[j*3] = (Math.random()-0.5)*260;
-        positions[j*3+1] = (Math.random()-0.5)*60+30;
-        positions[j*3+2] = 0;
+    // Tekerlekler
+    function wheel(cx, cy, cz, r, segCount, offset) {
+        for (let j = 0; j < segCount; j++) {
+            const theta = (j / segCount) * 2 * Math.PI;
+            positions[(offset + j) * 3] = cx + Math.cos(theta) * r;
+            positions[(offset + j) * 3 + 1] = cy + Math.sin(theta) * r;
+            positions[(offset + j) * 3 + 2] = cz - 10 + Math.sin(theta) * 6;
+        }
+    }
+    wheel(-75, -37, -28, 15, Math.floor(particleCount*0.07), i); i += Math.floor(particleCount*0.07);
+    wheel(75, -37, -28, 15, Math.floor(particleCount*0.07), i); i += Math.floor(particleCount*0.07);
+    // Artan partiküller iç tavan ve camlar
+    for(let j = i; j < particleCount; j++) {
+        positions[j*3] = (Math.random()-0.5)*80;
+        positions[j*3+1] = 25 + Math.random()*12;
+        positions[j*3+2] = 18 + Math.random()*18;
+    }
+    return positions;
+}
+
+// Mercedes: belirgin S coupe profili, daha yuvarlak tavan, büyük tekerlekler
+function mercedesShapePositions() {
+    const positions = new Float32Array(particleCount * 3);
+    const base = [
+        // Alt gövde
+        [-125, -33, -27], [-90, -37, -20], [-40, -39, -8], [0, -40, -3], [40, -39, -8], [90, -37, -20], [125, -33, -27],
+        // Arka
+        [137, -28, -11], [142, 0, 7], [137, 28, -11],
+        // Tavan ve camlar
+        [115, 36, 32], [90, 39, 40], [50, 42, 46], [0, 43, 49], [-50, 42, 46], [-90, 39, 40], [-115, 36, 32],
+        // Ön
+        [-137, 28, -11], [-142, 0, 7], [-137, -28, -11],
+    ];
+    const outlineCount = base.length;
+    let i = 0;
+    for (; i < Math.floor(particleCount * 0.75); i++) {
+        const t = (i / Math.floor(particleCount * 0.75)) * (outlineCount - 1);
+        const idx = Math.floor(t);
+        const frac = t - idx;
+        const x = base[idx][0] + frac * (base[(idx+1)%outlineCount][0] - base[idx][0]);
+        const y = base[idx][1] + frac * (base[(idx+1)%outlineCount][1] - base[idx][1]);
+        const z = base[idx][2] + frac * (base[(idx+1)%outlineCount][2] - base[idx][2]);
+        positions[i*3] = x;
+        positions[i*3+1] = y;
+        positions[i*3+2] = z;
+    }
+    // Tekerlekler
+    function wheel(cx, cy, cz, r, segCount, offset) {
+        for (let j = 0; j < segCount; j++) {
+            const theta = (j / segCount) * 2 * Math.PI;
+            positions[(offset + j) * 3] = cx + Math.cos(theta) * r;
+            positions[(offset + j) * 3 + 1] = cy + Math.sin(theta) * r;
+            positions[(offset + j) * 3 + 2] = cz - 13 + Math.sin(theta) * 8;
+        }
+    }
+    wheel(-85, -38, -27, 18, Math.floor(particleCount*0.07), i); i += Math.floor(particleCount*0.07);
+    wheel(85, -38, -27, 18, Math.floor(particleCount*0.07), i); i += Math.floor(particleCount*0.07);
+    // Artan partiküller tavan ve camlar
+    for(let j = i; j < particleCount; j++) {
+        positions[j*3] = (Math.random()-0.5)*90;
+        positions[j*3+1] = 27 + Math.random()*14;
+        positions[j*3+2] = 22 + Math.random()*22;
     }
     return positions;
 }
 
 function shapePositions(type) {
     if (type === "ferrari") return ferrariShapePositions();
-    const positions = new Float32Array(particleCount * 3);
-    if (type === "circle") {
-        const radius = 180;
-        for (let i = 0; i < particleCount; i++) {
-            const theta = (i / particleCount) * 2 * Math.PI;
-            positions[i * 3] = Math.cos(theta) * radius;
-            positions[i * 3 + 1] = Math.sin(theta) * radius;
-            positions[i * 3 + 2] = 0;
-        }
-    } else if (type === "square") {
-        const side = 320, perSide = Math.floor(particleCount / 4);
-        for (let i = 0; i < particleCount; i++) {
-            let idx = i % perSide, edge = Math.floor(i / perSide);
-            if (edge === 0) {
-                positions[i * 3] = -side/2 + (idx / perSide) * side;
-                positions[i * 3 + 1] = -side/2;
-            } else if (edge === 1) {
-                positions[i * 3] = side/2;
-                positions[i * 3 + 1] = -side/2 + (idx / perSide) * side;
-            } else if (edge === 2) {
-                positions[i * 3] = side/2 - (idx / perSide) * side;
-                positions[i * 3 + 1] = side/2;
-            } else {
-                positions[i * 3] = -side/2;
-                positions[i * 3 + 1] = side/2 - (idx / perSide) * side;
-            }
-            positions[i * 3 + 2] = 0;
-        }
-    } else if (type === "triangle") {
-        const size = 340;
-        const a = {x: 0, y: -size/2};
-        const b = {x: -size/2, y: size/2};
-        const c = {x: size/2, y: size/2};
-        for (let i = 0; i < particleCount; i++) {
-            const t = i / particleCount;
-            let x, y;
-            if (t < 1/3) {
-                let f = t * 3;
-                x = a.x + (b.x - a.x) * f;
-                y = a.y + (b.y - a.y) * f;
-            } else if (t < 2/3) {
-                let f = (t - 1/3) * 3;
-                x = b.x + (c.x - b.x) * f;
-                y = b.y + (c.y - b.y) * f;
-            } else {
-                let f = (t - 2/3) * 3;
-                x = c.x + (a.x - c.x) * f;
-                y = c.y + (a.y - c.y) * f;
-            }
-            positions[i * 3] = x;
-            positions[i * 3 + 1] = y;
-            positions[i * 3 + 2] = 0;
-        }
-    } else if (type === "star") {
-        const R = 170, r = 70;
-        for (let i = 0; i < particleCount; i++) {
-            const theta = (i / particleCount) * Math.PI * 2;
-            const isOuter = i % 2 === 0;
-            const radius = isOuter ? R : r;
-            positions[i * 3] = Math.cos(theta) * radius;
-            positions[i * 3 + 1] = Math.sin(theta) * radius;
-            positions[i * 3 + 2] = 0;
-        }
-    }
-    return positions;
+    if (type === "audi") return audiShapePositions();
+    if (type === "mercedes") return mercedesShapePositions();
+    return randomScatterPositions();
 }
 
 function setTargetShape() {
@@ -170,11 +192,11 @@ function init() {
 
     geometry.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
     const material = new THREE.PointsMaterial({
-        color: 0xff2d2d,
+        color: 0xffc300,
         size: 1.2,
         vertexColors: false,
         transparent: true,
-        opacity: 0.82,
+        opacity: 0.85,
         blending: THREE.AdditiveBlending
     });
 
@@ -222,17 +244,19 @@ function animate() {
         if (mouse._three) {
             let dx = mouse._three.x - px;
             let dy = mouse._three.y - py;
-            let dist = Math.sqrt(dx * dx + dy * dy);
+            let dz = mouse._three.z - pz;
+            let dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
             if (dist < 70) {
-                px += dx * 0.009;
-                py += dy * 0.009;
+                px += dx * 0.011;
+                py += dy * 0.011;
+                pz += dz * 0.011;
             }
         }
 
         // Hedefe doğru hareket
-        px += (tx - px) * 0.13;
-        py += (ty - py) * 0.13;
-        pz += (tz - pz) * 0.13;
+        px += (tx - px) * 0.12;
+        py += (ty - py) * 0.12;
+        pz += (tz - pz) * 0.12;
 
         particlePositions[i * 3] = px;
         particlePositions[i * 3 + 1] = py;
@@ -240,8 +264,9 @@ function animate() {
     }
     particles.geometry.attributes.position.needsUpdate = true;
 
-    scene.rotation.y += 0.0012;
-    scene.rotation.x += 0.0006;
+    // Döndürme efekti
+    scene.rotation.y += 0.0013;
+    scene.rotation.x += 0.0007;
 
     renderer.render(scene, camera);
 }
