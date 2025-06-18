@@ -7,13 +7,10 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <div id="bg-webgl"></div> <!-- Arka plan animasyon alanı -->
     <header>
         <h1>Vehicules Index</h1>
     </header>
-    <!-- WebGL animasyon alanı -->
-    <div class="webgl-container">
-        <canvas id="webgl-canvas" width="480" height="320"></canvas>
-    </div>
     <main>
         <h2>Bienvenue !</h2>
         <p>Ce site a pour objectif d'indexer toutes les voitures existantes dans le monde.</p>
@@ -28,6 +25,8 @@
     <footer>
         &copy; 2025 Vehicules Index. Tous droits réservés.
     </footer>
-    <script src="webgl-animation.js"></script>
+    <!-- Three.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
+    <script src="background-particles.js"></script>
 </body>
 </html>
