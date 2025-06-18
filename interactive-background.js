@@ -1,159 +1,68 @@
-// Yüksek çözünürlüklü 3D otomobil partikül animasyonu (Ferrari, Audi, Mercedes)
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 const container = document.getElementById('bg-webgl');
 let scene, camera, renderer, particles, particlePositions, targetPositions, particleCount = 5000;
 let state = "scatter";
 let scatterTimeout, gatherTimeout;
 let mouse = { x: 0, y: 0, z: 0 };
+let modelTargets = {}; // { ferrari: Float32Array, audi: Float32Array, mercedes: Float32Array }
+const modelFiles = {
+  ferrari: 'models/ferrari.glb',
+  audi: 'models/audi.glb',
+  mercedes: 'models/mercedes.glb',
+};
+const shapes = Object.keys(modelFiles);
 
-const shapes = ["ferrari", "audi", "mercedes"];
-
-// Ferrari: sportif coupe (gövde ve spoiler ile)
-function ferrariShapePositions() {
+function randomScatterPositions() {
     const positions = new Float32Array(particleCount * 3);
-    // 3D coupe silueti (basit)
-    const base = [
-        // Alt gövde (x, y, z)
-        [-130, -30, -30], [-110, -33, -27], [-70, -35, -15], [-30, -36, 0], [0, -35, 5],
-        [30, -36, 0], [70, -35, -15], [110, -33, -27], [130, -30, -30],
-        // Arka (spoiler)
-        [140, -25, -15], [145, 0, 10], [140, 25, -15],
-        // Üst gövde ve tavan
-        [110, 35, 35], [70, 38, 45], [30, 40, 52], [0, 41, 55],
-        [-30, 40, 52], [-70, 38, 45], [-110, 35, 35],
-        // Ön cam ve kaput
-        [-140, 25, -15], [-145, 0, 10], [-140, -25, -15],
-    ];
-    // Tekerler ve gövde arasında partikülleri dağıt
-    const outlineCount = base.length;
-    let i = 0;
-    for (; i < Math.floor(particleCount * 0.75); i++) {
-        const t = (i / Math.floor(particleCount * 0.75)) * (outlineCount - 1);
-        const idx = Math.floor(t);
-        const frac = t - idx;
-        const x = base[idx][0] + frac * (base[(idx+1)%outlineCount][0] - base[idx][0]);
-        const y = base[idx][1] + frac * (base[(idx+1)%outlineCount][1] - base[idx][1]);
-        const z = base[idx][2] + frac * (base[(idx+1)%outlineCount][2] - base[idx][2]);
-        positions[i*3] = x;
-        positions[i*3+1] = y;
-        positions[i*3+2] = z;
-    }
-    // Ön ve arka tekerlek (küçük toruslar)
-    function wheel(cx, cy, cz, r, segCount, offset) {
-        for (let j = 0; j < segCount; j++) {
-            const theta = (j / segCount) * 2 * Math.PI;
-            positions[(offset + j) * 3] = cx + Math.cos(theta) * r;
-            positions[(offset + j) * 3 + 1] = cy + Math.sin(theta) * r;
-            positions[(offset + j) * 3 + 2] = cz - 15 + Math.sin(theta) * 7;
-        }
-    }
-    wheel(-80, -36, -30, 17, Math.floor(particleCount*0.07), i); i += Math.floor(particleCount*0.07);
-    wheel(80, -36, -30, 17, Math.floor(particleCount*0.07), i); i += Math.floor(particleCount*0.07);
-    // Artan partiküller tavan ve cam bölgesine random
-    for(let j = i; j < particleCount; j++) {
-        positions[j*3] = (Math.random()-0.5)*100;
-        positions[j*3+1] = 25 + Math.random()*18;
-        positions[j*3+2] = 32 + Math.random()*18;
+    for (let i = 0; i < particleCount; i++) {
+        positions[i * 3] = (Math.random() - 0.5) * 700;
+        positions[i * 3 + 1] = (Math.random() - 0.5) * 420;
+        positions[i * 3 + 2] = (Math.random() - 0.5) * 700;
     }
     return positions;
 }
 
-// Audi: sedan/coupe karışımı, belirgin tavan ve alçak gövde
-function audiShapePositions() {
-    const positions = new Float32Array(particleCount * 3);
-    const base = [
-        // Alt gövde
-        [-120, -35, -28], [-80, -38, -24], [-35, -39, -14], [0, -40, -8], [35, -39, -14], [80, -38, -24], [120, -35, -28],
-        // Arka tampon
-        [135, -28, -16], [140, 0, 5], [135, 28, -16],
-        // Tavan ve camlar
-        [110, 34, 25], [80, 38, 32], [35, 41, 38], [0, 42, 40], [-35, 41, 38], [-80, 38, 32], [-110, 34, 25],
-        // Ön tampon
-        [-135, 28, -16], [-140, 0, 5], [-135, -28, -16],
-    ];
-    const outlineCount = base.length;
-    let i = 0;
-    for (; i < Math.floor(particleCount * 0.75); i++) {
-        const t = (i / Math.floor(particleCount * 0.75)) * (outlineCount - 1);
-        const idx = Math.floor(t);
-        const frac = t - idx;
-        const x = base[idx][0] + frac * (base[(idx+1)%outlineCount][0] - base[idx][0]);
-        const y = base[idx][1] + frac * (base[(idx+1)%outlineCount][1] - base[idx][1]);
-        const z = base[idx][2] + frac * (base[(idx+1)%outlineCount][2] - base[idx][2]);
-        positions[i*3] = x;
-        positions[i*3+1] = y;
-        positions[i*3+2] = z;
+// 3D modelden rastgele yüzey noktası örnekle (point cloud)
+function samplePointsFromGeometry(geometry, numPoints) {
+    geometry.computeBoundingBox();
+    const position = geometry.attributes.position;
+    const sampled = new Float32Array(numPoints * 3);
+    for (let i = 0; i < numPoints; i++) {
+        const idx = Math.floor(Math.random() * position.count);
+        sampled[i * 3] = position.getX(idx);
+        sampled[i * 3 + 1] = position.getY(idx);
+        sampled[i * 3 + 2] = position.getZ(idx);
     }
-    // Tekerlekler
-    function wheel(cx, cy, cz, r, segCount, offset) {
-        for (let j = 0; j < segCount; j++) {
-            const theta = (j / segCount) * 2 * Math.PI;
-            positions[(offset + j) * 3] = cx + Math.cos(theta) * r;
-            positions[(offset + j) * 3 + 1] = cy + Math.sin(theta) * r;
-            positions[(offset + j) * 3 + 2] = cz - 10 + Math.sin(theta) * 6;
-        }
-    }
-    wheel(-75, -37, -28, 15, Math.floor(particleCount*0.07), i); i += Math.floor(particleCount*0.07);
-    wheel(75, -37, -28, 15, Math.floor(particleCount*0.07), i); i += Math.floor(particleCount*0.07);
-    // Artan partiküller iç tavan ve camlar
-    for(let j = i; j < particleCount; j++) {
-        positions[j*3] = (Math.random()-0.5)*80;
-        positions[j*3+1] = 25 + Math.random()*12;
-        positions[j*3+2] = 18 + Math.random()*18;
-    }
-    return positions;
+    return sampled;
 }
 
-// Mercedes: belirgin S coupe profili, daha yuvarlak tavan, büyük tekerlekler
-function mercedesShapePositions() {
-    const positions = new Float32Array(particleCount * 3);
-    const base = [
-        // Alt gövde
-        [-125, -33, -27], [-90, -37, -20], [-40, -39, -8], [0, -40, -3], [40, -39, -8], [90, -37, -20], [125, -33, -27],
-        // Arka
-        [137, -28, -11], [142, 0, 7], [137, 28, -11],
-        // Tavan ve camlar
-        [115, 36, 32], [90, 39, 40], [50, 42, 46], [0, 43, 49], [-50, 42, 46], [-90, 39, 40], [-115, 36, 32],
-        // Ön
-        [-137, 28, -11], [-142, 0, 7], [-137, -28, -11],
-    ];
-    const outlineCount = base.length;
-    let i = 0;
-    for (; i < Math.floor(particleCount * 0.75); i++) {
-        const t = (i / Math.floor(particleCount * 0.75)) * (outlineCount - 1);
-        const idx = Math.floor(t);
-        const frac = t - idx;
-        const x = base[idx][0] + frac * (base[(idx+1)%outlineCount][0] - base[idx][0]);
-        const y = base[idx][1] + frac * (base[(idx+1)%outlineCount][1] - base[idx][1]);
-        const z = base[idx][2] + frac * (base[(idx+1)%outlineCount][2] - base[idx][2]);
-        positions[i*3] = x;
-        positions[i*3+1] = y;
-        positions[i*3+2] = z;
+function loadModelTargets(callback) {
+    const loader = new GLTFLoader();
+    let loaded = 0;
+    for (const [brand, url] of Object.entries(modelFiles)) {
+        loader.load(url, gltf => {
+            // Tüm meshleri birleştir
+            let geometries = [];
+            gltf.scene.traverse(child => {
+                if (child.isMesh) {
+                    let g = child.geometry.clone();
+                    g.applyMatrix4(child.matrixWorld);
+                    geometries.push(g);
+                }
+            });
+            let mergedGeometry = BufferGeometryUtils.mergeBufferGeometries(geometries, false);
+            modelTargets[brand] = samplePointsFromGeometry(mergedGeometry, particleCount);
+            loaded++;
+            if (loaded === shapes.length) callback();
+        });
     }
-    // Tekerlekler
-    function wheel(cx, cy, cz, r, segCount, offset) {
-        for (let j = 0; j < segCount; j++) {
-            const theta = (j / segCount) * 2 * Math.PI;
-            positions[(offset + j) * 3] = cx + Math.cos(theta) * r;
-            positions[(offset + j) * 3 + 1] = cy + Math.sin(theta) * r;
-            positions[(offset + j) * 3 + 2] = cz - 13 + Math.sin(theta) * 8;
-        }
-    }
-    wheel(-85, -38, -27, 18, Math.floor(particleCount*0.07), i); i += Math.floor(particleCount*0.07);
-    wheel(85, -38, -27, 18, Math.floor(particleCount*0.07), i); i += Math.floor(particleCount*0.07);
-    // Artan partiküller tavan ve camlar
-    for(let j = i; j < particleCount; j++) {
-        positions[j*3] = (Math.random()-0.5)*90;
-        positions[j*3+1] = 27 + Math.random()*14;
-        positions[j*3+2] = 22 + Math.random()*22;
-    }
-    return positions;
 }
 
 function shapePositions(type) {
-    if (type === "ferrari") return ferrariShapePositions();
-    if (type === "audi") return audiShapePositions();
-    if (type === "mercedes") return mercedesShapePositions();
+    if (modelTargets[type]) return modelTargets[type];
     return randomScatterPositions();
 }
 
@@ -178,7 +87,7 @@ function init() {
         1,
         1200
     );
-    camera.position.z = 450;
+    camera.position.z = 350;
 
     renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
     renderer.setClearColor(0x111111, 1);
@@ -192,11 +101,11 @@ function init() {
 
     geometry.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
     const material = new THREE.PointsMaterial({
-        color: 0xffc300,
-        size: 1.2,
+        color: 0xffffff,
+        size: 1.1,
         vertexColors: false,
         transparent: true,
-        opacity: 0.85,
+        opacity: 0.82,
         blending: THREE.AdditiveBlending
     });
 
@@ -264,7 +173,6 @@ function animate() {
     }
     particles.geometry.attributes.position.needsUpdate = true;
 
-    // Döndürme efekti
     scene.rotation.y += 0.0013;
     scene.rotation.x += 0.0007;
 
@@ -277,5 +185,8 @@ function onWindowResize() {
     renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
-init();
-animate();
+// ---- Uygulama başlangıcı ----
+loadModelTargets(() => {
+    init();
+    animate();
+});
