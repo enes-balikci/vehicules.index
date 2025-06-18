@@ -10,6 +10,18 @@ header {
     padding: 1rem;
     text-align: center;
 }
+.webgl-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: #222;
+    padding: 1rem 0 2rem 0;
+}
+#webgl-canvas {
+    border-radius: 12px;
+    background: #111;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
 main {
     margin: 2rem auto;
     max-width: 800px;
