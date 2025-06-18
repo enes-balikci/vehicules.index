@@ -2,8 +2,7 @@
 
 const container = document.getElementById('bg-webgl');
 let scene, camera, renderer, particles, particlePositions, targetPositions, particleCount = 350;
-let state = "scatter"; // "gather" veya "scatter"
-let shapeIndex = 0;
+let state = "scatter";
 let scatterTimeout, gatherTimeout;
 let mouse = { x: 0, y: 0, z: 0 };
 
@@ -30,31 +29,25 @@ function shapePositions(type) {
             positions[i * 3 + 2] = 0;
         }
     } else if (type === "square") {
-        // Square perimeter
         const side = 300, perSide = Math.floor(particleCount / 4);
         for (let i = 0; i < particleCount; i++) {
             let idx = i % perSide, edge = Math.floor(i / perSide);
             if (edge === 0) {
-                // Top edge
                 positions[i * 3] = -side/2 + (idx / perSide) * side;
                 positions[i * 3 + 1] = -side/2;
             } else if (edge === 1) {
-                // Right edge
                 positions[i * 3] = side/2;
                 positions[i * 3 + 1] = -side/2 + (idx / perSide) * side;
             } else if (edge === 2) {
-                // Bottom edge
                 positions[i * 3] = side/2 - (idx / perSide) * side;
                 positions[i * 3 + 1] = side/2;
             } else {
-                // Left edge
                 positions[i * 3] = -side/2;
                 positions[i * 3 + 1] = side/2 - (idx / perSide) * side;
             }
             positions[i * 3 + 2] = 0;
         }
     } else if (type === "triangle") {
-        // Equilateral triangle
         const size = 300;
         const a = {x: 0, y: -size/2};
         const b = {x: -size/2, y: size/2};
@@ -63,17 +56,14 @@ function shapePositions(type) {
             const t = i / particleCount;
             let x, y;
             if (t < 1/3) {
-                // From a to b
                 let f = t * 3;
                 x = a.x + (b.x - a.x) * f;
                 y = a.y + (b.y - a.y) * f;
             } else if (t < 2/3) {
-                // From b to c
                 let f = (t - 1/3) * 3;
                 x = b.x + (c.x - b.x) * f;
                 y = b.y + (c.y - b.y) * f;
             } else {
-                // From c to a
                 let f = (t - 2/3) * 3;
                 x = c.x + (a.x - c.x) * f;
                 y = c.y + (a.y - c.y) * f;
@@ -83,7 +73,6 @@ function shapePositions(type) {
             positions[i * 3 + 2] = 0;
         }
     } else if (type === "star") {
-        // 5-pointed star
         const R = 150, r = 60;
         for (let i = 0; i < particleCount; i++) {
             const theta = (i / particleCount) * Math.PI * 2;
