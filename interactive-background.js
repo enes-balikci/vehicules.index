@@ -1,192 +1,128 @@
-import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+// WebGPU ile kompleks arka plan animasyonu (plazma efektli)
 
 const container = document.getElementById('bg-webgl');
-let scene, camera, renderer, particles, particlePositions, targetPositions, particleCount = 5000;
-let state = "scatter";
-let scatterTimeout, gatherTimeout;
-let mouse = { x: 0, y: 0, z: 0 };
-let modelTargets = {}; // { ferrari: Float32Array, audi: Float32Array, mercedes: Float32Array }
-const modelFiles = {
-  ferrari: 'models/ferrari.glb',
-  audi: 'models/audi.glb',
-  mercedes: 'models/mercedes.glb',
-};
-const shapes = Object.keys(modelFiles);
 
-function randomScatterPositions() {
-    const positions = new Float32Array(particleCount * 3);
-    for (let i = 0; i < particleCount; i++) {
-        positions[i * 3] = (Math.random() - 0.5) * 700;
-        positions[i * 3 + 1] = (Math.random() - 0.5) * 420;
-        positions[i * 3 + 2] = (Math.random() - 0.5) * 700;
-    }
-    return positions;
+// WebGPU destekleniyor mu kontrol
+if (!navigator.gpu) {
+    container.innerHTML = "<div style='color:white;font-size:2em;text-align:center;position:absolute;width:100vw;top:40vh;'>WebGPU desteklenmiyor.<br>Chrome Canary veya Edge ile açın.</div>";
+    throw new Error("WebGPU not supported");
 }
 
-// 3D modelden rastgele yüzey noktası örnekle (point cloud)
-function samplePointsFromGeometry(geometry, numPoints) {
-    geometry.computeBoundingBox();
-    const position = geometry.attributes.position;
-    const sampled = new Float32Array(numPoints * 3);
-    for (let i = 0; i < numPoints; i++) {
-        const idx = Math.floor(Math.random() * position.count);
-        sampled[i * 3] = position.getX(idx);
-        sampled[i * 3 + 1] = position.getY(idx);
-        sampled[i * 3 + 2] = position.getZ(idx);
-    }
-    return sampled;
-}
+async function main() {
+    // Canvas oluştur
+    const canvas = document.createElement("canvas");
+    canvas.style.width = "100vw";
+    canvas.style.height = "100vh";
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    canvas.style.display = "block";
+    canvas.style.position = "fixed";
+    canvas.style.top = "0";
+    canvas.style.left = "0";
+    canvas.style.zIndex = "0";
+    container.appendChild(canvas);
 
-function loadModelTargets(callback) {
-    const loader = new GLTFLoader();
-    let loaded = 0;
-    for (const [brand, url] of Object.entries(modelFiles)) {
-        loader.load(url, gltf => {
-            // Tüm meshleri birleştir
-            let geometries = [];
-            gltf.scene.traverse(child => {
-                if (child.isMesh) {
-                    let g = child.geometry.clone();
-                    g.applyMatrix4(child.matrixWorld);
-                    geometries.push(g);
-                }
-            });
-            let mergedGeometry = BufferGeometryUtils.mergeBufferGeometries(geometries, false);
-            modelTargets[brand] = samplePointsFromGeometry(mergedGeometry, particleCount);
-            loaded++;
-            if (loaded === shapes.length) callback();
-        });
-    }
-}
+    // WebGPU ayarları
+    const adapter = await navigator.gpu.requestAdapter();
+    const device = await adapter.requestDevice();
+    const context = canvas.getContext('webgpu');
+    const format = navigator.gpu.getPreferredCanvasFormat();
 
-function shapePositions(type) {
-    if (modelTargets[type]) return modelTargets[type];
-    return randomScatterPositions();
-}
-
-function setTargetShape() {
-    const type = shapes[Math.floor(Math.random() * shapes.length)];
-    targetPositions = shapePositions(type);
-    state = "gather";
-    clearTimeout(gatherTimeout);
-
-    gatherTimeout = setTimeout(() => {
-        targetPositions = randomScatterPositions();
-        state = "scatter";
-        scatterTimeout = setTimeout(setTargetShape, 3300 + Math.random()*1000);
-    }, 3500 + Math.random()*1200);
-}
-
-function init() {
-    scene = new THREE.Scene();
-    camera = new THREE.PerspectiveCamera(
-        75,
-        window.innerWidth / window.innerHeight,
-        1,
-        1200
-    );
-    camera.position.z = 350;
-
-    renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-    renderer.setClearColor(0x111111, 1);
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    container.appendChild(renderer.domElement);
-
-    // Partiküller
-    const geometry = new THREE.BufferGeometry();
-    particlePositions = randomScatterPositions();
-    targetPositions = randomScatterPositions();
-
-    geometry.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
-    const material = new THREE.PointsMaterial({
-        color: 0xffffff,
-        size: 1.1,
-        vertexColors: false,
-        transparent: true,
-        opacity: 0.82,
-        blending: THREE.AdditiveBlending
+    context.configure({
+        device,
+        format,
+        alphaMode: "premultiplied"
     });
 
-    particles = new THREE.Points(geometry, material);
-    scene.add(particles);
+    // Shadertoy tarzı plazma animasyonu (WGSL)
+    const shaderCode = `
+        @group(0) @binding(0) var<uniform> uTime : f32;
+        @group(0) @binding(1) var<uniform> uRes : vec2<f32>;
 
-    window.addEventListener('resize', onWindowResize, false);
-    window.addEventListener('mousemove', onMouseMove, false);
-    window.addEventListener('touchmove', onTouchMove, false);
-
-    setTargetShape();
-}
-
-function onMouseMove(event) {
-    mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-    mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-    let vector = new THREE.Vector3(mouse.x, mouse.y, 0.5);
-    vector.unproject(camera);
-    mouse.z = 0;
-    mouse._three = vector;
-}
-
-function onTouchMove(event) {
-    if (event.touches && event.touches.length > 0) {
-        onMouseMove({
-            clientX: event.touches[0].clientX,
-            clientY: event.touches[0].clientY
-        });
-    }
-}
-
-function animate() {
-    requestAnimationFrame(animate);
-
-    for (let i = 0; i < particleCount; i++) {
-        let px = particlePositions[i * 3];
-        let py = particlePositions[i * 3 + 1];
-        let pz = particlePositions[i * 3 + 2];
-
-        let tx = targetPositions[i * 3];
-        let ty = targetPositions[i * 3 + 1];
-        let tz = targetPositions[i * 3 + 2];
-
-        // Fareye yakınsa hafif çekim
-        if (mouse._three) {
-            let dx = mouse._three.x - px;
-            let dy = mouse._three.y - py;
-            let dz = mouse._three.z - pz;
-            let dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-            if (dist < 70) {
-                px += dx * 0.011;
-                py += dy * 0.011;
-                pz += dz * 0.011;
-            }
+        @vertex
+        fn vs_main(@builtin(vertex_index) vertexIndex : u32) -> @builtin(position) vec4<f32> {
+            var pos = array<vec2<f32>, 6>(
+                vec2<f32>(-1.0, -1.0),
+                vec2<f32>(1.0, -1.0),
+                vec2<f32>(-1.0, 1.0),
+                vec2<f32>(-1.0, 1.0),
+                vec2<f32>(1.0, -1.0),
+                vec2<f32>(1.0, 1.0)
+            );
+            return vec4<f32>(pos[vertexIndex], 0.0, 1.0);
         }
 
-        // Hedefe doğru hareket
-        px += (tx - px) * 0.12;
-        py += (ty - py) * 0.12;
-        pz += (tz - pz) * 0.12;
+        @fragment
+        fn fs_main(@builtin(position) fragCoord: vec4<f32>) -> @location(0) vec4<f32> {
+            let uv = fragCoord.xy / uRes;
+            let color = 0.5 + 0.5 * cos(uTime + uv.xyx + vec3<f32>(0,2,4));
+            // Plazma
+            let plasma = sin(uv.x*10.0+uTime)+sin(uv.y*10.0+uTime)+
+                         sin((uv.x+uv.y)*10.0+uTime)+sin(length(uv-0.5)*20.0-uTime);
+            let c = vec3<f32>(0.5+0.5*cos(uTime+plasma+vec3<f32>(0,2,4)));
+            return vec4<f32>(c, 1.0);
+        }
+    `;
 
-        particlePositions[i * 3] = px;
-        particlePositions[i * 3 + 1] = py;
-        particlePositions[i * 3 + 2] = pz;
+    // Uniform buffer (time, resolution)
+    const uniformBuffer = device.createBuffer({
+        size: 4 + 8,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
+
+    // Pipeline
+    const shaderModule = device.createShaderModule({code: shaderCode});
+    const pipeline = device.createRenderPipeline({
+        layout: "auto",
+        vertex: { module: shaderModule, entryPoint: "vs_main" },
+        fragment: {
+            module: shaderModule,
+            entryPoint: "fs_main",
+            targets: [{ format }]
+        },
+        primitive: { topology: "triangle-list" }
+    });
+
+    // Bind group
+    const bindGroup = device.createBindGroup({
+        layout: pipeline.getBindGroupLayout(0),
+        entries: [
+            { binding: 0, resource: { buffer: uniformBuffer, offset: 0, size: 4 } },       // time
+            { binding: 1, resource: { buffer: uniformBuffer, offset: 4, size: 8 } },       // resolution
+        ],
+    });
+
+    function draw(time) {
+        // time: ms -> saniye
+        const sec = time * 0.001;
+        // Uniformları güncelle
+        const resolution = new Float32Array([canvas.width, canvas.height]);
+        device.queue.writeBuffer(uniformBuffer, 0, new Float32Array([sec]));
+        device.queue.writeBuffer(uniformBuffer, 4, resolution);
+
+        const encoder = device.createCommandEncoder();
+        const pass = encoder.beginRenderPass({
+            colorAttachments: [{
+                view: context.getCurrentTexture().createView(),
+                clearValue: {r:0,g:0,b:0,a:1},
+                loadOp: 'clear',
+                storeOp: 'store'
+            }]
+        });
+        pass.setPipeline(pipeline);
+        pass.setBindGroup(0, bindGroup);
+        pass.draw(6, 1, 0, 0);
+        pass.end();
+        device.queue.submit([encoder.finish()]);
+        requestAnimationFrame(draw);
     }
-    particles.geometry.attributes.position.needsUpdate = true;
 
-    scene.rotation.y += 0.0013;
-    scene.rotation.x += 0.0007;
+    window.addEventListener("resize", () => {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    });
 
-    renderer.render(scene, camera);
+    requestAnimationFrame(draw);
 }
 
-function onWindowResize() {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-}
-
-// ---- Uygulama başlangıcı ----
-loadModelTargets(() => {
-    init();
-    animate();
-});
+main();
