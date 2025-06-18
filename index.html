@@ -1,22 +1,32 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>3D Car Particle Animation</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-        html, body { margin:0; padding:0; overflow:hidden; background:#111;}
-        #bg-webgl { position:fixed; width:100vw; height:100vh; top:0; left:0; z-index:0; }
-        .info { position:fixed; top:10px; left:10px; color:#fff; background:rgba(0,0,0,0.5);padding:8px 14px;border-radius:8px;z-index:20;font-family:sans-serif;}
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vehicules Index</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div id="bg-webgl"></div>
-    <div class="info">
-        <b>3D Car Particle Animation</b><br>
-        Ferrari, Audi, Mercedes gerçek 3D modeliyle<br>
-        Fareyi oynat. Her 3 sn'de bir model değişir.
-    </div>
-    <script type="module" src="interactive-background.js"></script>
+    <div id="bg-webgl"></div> <!-- Interaktif arka plan animasyonu -->
+    <header>
+        <h1>Vehicules Index</h1>
+    </header>
+    <main>
+        <h2>Bienvenue !</h2>
+        <p>Ce site a pour objectif d'indexer toutes les voitures existantes dans le monde.</p>
+        <ul>
+            <li>Informations détaillées sur chaque marque et modèle de voiture</li>
+            <li>Outils de recherche et de filtrage avancés pour trouver n'importe quel véhicule</li>
+            <li>Base de données constamment mise à jour avec les nouvelles voitures</li>
+            <li>Contact et support pour proposer de nouveaux véhicules ou corriger des informations</li>
+        </ul>
+        <p>Utilisez le menu pour commencer à explorer la base de données mondiale des voitures.</p>
+    </main>
+    <footer>
+        &copy; 2025 Vehicules Index. Tous droits réservés.
+    </footer>
+    <!-- Three.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
+    <script src="interactive-background.js"></script>
 </body>
 </html>
